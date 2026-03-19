@@ -58,7 +58,7 @@ defmodule Ryujin.Application do
     Task.start(fn ->
       {:ok, active_servers} = Self.guilds()
       :timer.sleep(1000)
-      name = "as noticias do império lygoniano ao #{Enum.random(active_servers).name}."
+      name = "Planejando como destruir o #{Enum.random(active_servers).name}."
       Self.update_status(:online, {:streaming, name, "https://youtu.be/47AVNwXG3CA"})
     end)
 

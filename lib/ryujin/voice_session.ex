@@ -45,6 +45,22 @@ defmodule Ryujin.VoiceSession do
     end
   end
 
+  @spec toggle_loop(Nostrum.Struct.Guild.id()) :: {:ok, boolean()} | {:error, :session_not_found}
+  def toggle_loop(guild_id) do
+    case lookup(guild_id) do
+      {:ok, pid} -> GenServer.call(pid, :toggle_loop)
+      {:error, :not_found} -> {:error, :session_not_found}
+    end
+  end
+
+  @spec on_track_end(Nostrum.Struct.Guild.id()) :: :ok
+  def on_track_end(guild_id) do
+    case lookup(guild_id) do
+      {:ok, pid} -> GenServer.cast(pid, :on_track_end)
+      {:error, :not_found} -> :ok
+    end
+  end
+
   @spec leave(Nostrum.Struct.Guild.id()) :: :ok
   def leave(guild_id) do
     case lookup(guild_id) do
@@ -68,7 +84,8 @@ defmodule Ryujin.VoiceSession do
       guild_id: guild_id,
       channel_id: channel_id,
       pending_join?: true,
-      current_track: nil
+      current_track: nil,
+      loop: false
     }
 
     send(self(), :attempt_join)
@@ -106,14 +123,28 @@ defmodule Ryujin.VoiceSession do
   @impl true
   def handle_call(:leave, _from, state) do
     Voice.leave_channel(state.guild_id)
-    {:stop, :normal, :ok, %{state | pending_join?: true, current_track: nil}}
+    {:stop, :normal, :ok, %{state | pending_join?: true, current_track: nil, loop: false}}
+  end
+
+  @impl true
+  def handle_call(:toggle_loop, _from, state) do
+    new_loop = !state.loop
+    {:reply, {:ok, new_loop}, %{state | loop: new_loop}}
   end
 
   @impl true
   def handle_cast({:play, url, type, opts}, state) do
     attempt_play(state.guild_id, {url, type, opts})
-    {:noreply, %{state | current_track: url}}
+    {:noreply, %{state | current_track: {url, type, opts}}}
   end
+
+  @impl true
+  def handle_cast(:on_track_end, %{loop: true, current_track: {_, _, _} = track} = state) do
+    attempt_play(state.guild_id, track)
+    {:noreply, state}
+  end
+
+  def handle_cast(:on_track_end, state), do: {:noreply, state}
 
   @impl true
   def handle_info(:attempt_join, state) do

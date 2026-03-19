@@ -80,6 +80,11 @@ defmodule Ryujin.Consumer do
     end
   end
 
+  @impl true
+  def handle_event({:VOICE_SPEAKING_UPDATE, %{guild_id: guild_id, speaking: false, timed_out: false}, _}) do
+    VoiceSession.on_track_end(guild_id)
+  end
+
   # VOICE COMMANDS
   # ========================================
   @impl true
@@ -191,6 +196,31 @@ defmodule Ryujin.Consumer do
 
       _ ->
         Logger.info("Unexpected response from check_if_incall/1")
+    end
+  end
+
+  @impl true
+  def handle_event(
+        {:INTERACTION_CREATE, %Interaction{data: %{name: "loop"}} = interaction, _ws_state}
+      ) do
+    case VoiceSession.toggle_loop(interaction.guild_id) do
+      {:ok, true} ->
+        Nostrum.Api.Interaction.create_response(interaction, %{
+          type: 4,
+          data: %{content: "> Loop ativado.", flags: 64}
+        })
+
+      {:ok, false} ->
+        Nostrum.Api.Interaction.create_response(interaction, %{
+          type: 4,
+          data: %{content: "> Loop desativado.", flags: 64}
+        })
+
+      {:error, :session_not_found} ->
+        Nostrum.Api.Interaction.create_response(interaction, %{
+          type: 4,
+          data: %{content: "> Não estou em nenhum canal de voz.", flags: 64}
+        })
     end
   end
 
