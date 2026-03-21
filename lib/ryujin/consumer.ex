@@ -145,11 +145,32 @@ defmodule Ryujin.Consumer do
             case VoiceSession.join(interaction.guild_id, voice_channel) do
               :ok ->
                 Nostrum.Api.Interaction.create_response(interaction, %{
-                  type: 4,
+                  type: 5,
                   data: %{
-                    content: "> Tocando #{url}.",
+                    content: "> #{url}.",
                     # flags: 64 - Deactivated cause I want people to know what I listen to
                   }
+                })
+
+                title_args = [
+                  "--print", "title",
+                  "--no-warnings",
+                  "--ignore-errors",
+                  "--max-downloads", "1",
+                  url
+                ]
+
+                title =
+                  case System.cmd("yt-dlp", title_args) do
+                    {output, _exit_code} when byte_size(output) > 0 ->
+                      output |> String.trim() |> String.split("\n") |> List.first()
+
+                    _ ->
+                      raw
+                  end
+
+                Nostrum.Api.Interaction.edit_response(interaction, %{
+                  content: "> Tocando #{title}."
                 })
 
                 VoiceSession.play(interaction.guild_id, url, :ytdl)
