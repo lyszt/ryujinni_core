@@ -148,7 +148,7 @@ defmodule Ryujin.Consumer do
                   type: 4,
                   data: %{
                     content: "> Tocando #{url}.",
-                    flags: 64
+                    # flags: 64 - Deactivated cause I want people to know what I listen to
                   }
                 })
 
