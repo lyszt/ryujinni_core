@@ -198,9 +198,6 @@ defmodule Ryujin.Consumer do
                 flags: 64
               }
             })
-
-          {:error, reason} ->
-            Logger.info("Unexpected option parsing result: #{inspect(reason)}")
         end
 
       {:not_found, nil} ->
@@ -278,7 +275,7 @@ defmodule Ryujin.Consumer do
       }
     })
 
-    %Interaction{application_id: app_id, token: token} = interaction
+    %Interaction{application_id: _app_id, token: _token} = interaction
 
     case CamaraApi.Eventos.fetch_and_format_events() do
       {:ok, formatted_events} ->
@@ -325,6 +322,8 @@ defmodule Ryujin.Consumer do
     end
   end
 
+  def handle_event(_), do: :ok
+
   # ===================================
   # PRIVATE
 
@@ -365,5 +364,4 @@ defmodule Ryujin.Consumer do
   defp get_option(_interaction, _name), do: {:error, :missing}
 
   @impl true
-  def handle_event(_), do: :ok
 end
