@@ -28,6 +28,10 @@ defmodule Ryujin.CommandRegister do
       description: "Toca a música atual em loop infinito.",
     },
     %{
+      name: "skip",
+      description: "Pula a música atual",
+    },
+    %{
       name: "leave",
       description: "Faz o bot sair do canal de voz atual."
     },

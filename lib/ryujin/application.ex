@@ -4,7 +4,9 @@ defmodule Ryujin.Application do
   @moduledoc false
 
   use Application
+  require Logger
   alias Nostrum.Api.Self
+  alias Ryujin.Speech
 
   @impl true
   def start(_type, _args) do
@@ -58,8 +60,82 @@ defmodule Ryujin.Application do
     Task.start(fn ->
       {:ok, active_servers} = Self.guilds()
       :timer.sleep(1000)
-      name = "Planejando como destruir o #{Enum.random(active_servers).name}."
-      Self.update_status(:online, {:streaming, name, "https://youtu.be/47AVNwXG3CA"})
+
+      selected_guild = Enum.random(active_servers)
+
+      channel_id =
+        case Nostrum.Api.Guild.channels(selected_guild.id) do
+          {:ok, channels} ->
+            channels
+            |> Enum.filter(&(&1.type == 0))
+            |> Enum.map(& &1.id)
+            |> case do
+              [] -> nil
+              ids -> Enum.random(ids)
+            end
+
+          _ ->
+            nil
+        end
+
+      recent_text =
+        if channel_id do
+          case Nostrum.Api.Channel.messages(channel_id, 10) do
+            {:ok, messages} ->
+              messages
+              |> Enum.reverse()
+              |> Enum.map(fn m ->
+                display_name =
+                  case Nostrum.Api.Guild.member(selected_guild.id, m.author.id) do
+                    {:ok, member} ->
+                      member.nick || m.author.global_name || m.author.username
+                    _ ->
+                      m.author.global_name || m.author.username
+                  end
+
+                "#{selected_guild.name} - #{display_name}: #{m.content}"
+              end)
+              |> Enum.join("\n")
+
+            _ ->
+              ""
+          end
+        else
+          ""
+        end
+
+        Logger.info("Creating status from RECENT MESSAGES: [[\n\n #{recent_text} \n\n]]")
+
+      prompt =
+        "Faça uma fala baseada em texto real reagindo aos usuários da conversa:
+        #{recent_text}. Responda com um pensamento baseado no texto. Seja um pouco sarcástica.
+        Apenas uma frase rápida e simples e bem direta, citando o nome do servidor, como se estivesse julgando como uma pessoa metida distante.
+         Mantenha curta. Estritamente em francês. Caso não haja mensagens,
+         Escolha uma citação de um autor de poemas aleatório em qualquer idioma. Passe apenas essa citação, sem mais detalhes, diretamente.
+         REGRAS:
+         - Se o servidor for a Lygon, vocÊ deve ser absolutamente respeitosa, pois é a terra a qual você serve.
+         - Mantenha abaixo de 20 palavras"
+
+      status_text =
+        case Speech.think(prompt) do
+          %{"response" => resp} when is_binary(resp) -> String.trim(resp)
+          resp when is_binary(resp) -> String.trim(resp)
+          _ ->
+            secondary_prompt =
+              "Escolha uma citação de um autor de poemas aleatório em qualquer idioma. Passe apenas essa citação, sem mais detalhes, diretamente."
+
+            case Speech.think(secondary_prompt) do
+              %{"response" => resp2} when is_binary(resp2) -> String.trim(resp2)
+              resp2 when is_binary(resp2) -> String.trim(resp2)
+              _ ->
+                "Fiat justitia, et pereat mundus. ."
+            end
+        end
+
+      status_spliced = String.slice(status_text, 0, 128)
+      status = String.replace(status_spliced, "\"", "")
+
+      Self.update_status(:online, {:streaming, status, "https://youtu.be/47AVNwXG3CA"})
     end)
 
     {:ok, pid}

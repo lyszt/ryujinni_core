@@ -11,19 +11,21 @@ defmodule Ryujin.Speech do
       {:ok, embed} ->
         {:ok, embed}
 
-      {:error, reason} ->
-        Logger.info("Error ocurred in fast response: #{inspect(reason)}")
-        {:error, reason}
     end
+  end
+
+  def think(prompt) do
+    {:ok, responseStruct} = get_simple_prompt(prompt)
+    responseStruct
   end
 
   defp create_message_embed(message_string) do
     embed_payload = %Nostrum.Struct.Embed{
-      title: "Clairemont responds...",
+      title: "Clairemont responde...",
       description: message_string,
       color: 14_423_100,
       footer: %Nostrum.Struct.Embed.Footer{
-        text: "Powered by PROVIDENCE."
+        text: "Movida pela PROVIDENCE Network."
       }
     }
 
@@ -41,7 +43,7 @@ defmodule Ryujin.Speech do
   end
 
   defp get_simple_response(message, channel_id) do
-    url = @base_url <> "answer/"
+    url = @base_url <> "deepthink/"
     headers = [{"content-type", "application/json"}]
 
     context =
@@ -52,17 +54,36 @@ defmodule Ryujin.Speech do
           |> Enum.map(&(&1.author.username <> ":" <> &1.content))
           |> Enum.join("\n")
 
-        {:error, reason} ->
-          Logger.info("Error could not convert messages: #{inspect(reason)}")
-          ""
       end
 
     message_with_context = "#{message} -- CHAT CONTEXT: #{context}"
 
-    request_body = Jason.encode!(%{prompt: message_with_context})
+    request_body = Jason.encode!(%{prompt: message_with_context, light: true})
     request = Finch.build(:post, url, headers, request_body)
 
     # Needs a huge timeout in case Providentia overthinks
+    case Finch.request(request, @finch, receive_timeout: 200_000) do
+      {:ok, %Finch.Response{status: 200, body: body}} ->
+        case Jason.decode(body, keys: :strings) do
+          {:ok, data} -> {:ok, data}
+          {:error, reason} -> {:error, "JSON decoding failed: #{inspect(reason)}"}
+        end
+
+      {:ok, %Finch.Response{status: status, body: body}} ->
+        {:error, "API returned status #{status} with body: #{body}"}
+
+      {:error, reason} ->
+        {:error, "HTTP request failed: #{inspect(reason)}"}
+    end
+  end
+
+  defp get_simple_prompt(prompt) do
+    url = @base_url <> "answer/"
+    headers = [{"content-type", "application/json"}]
+
+    request_body = Jason.encode!(%{prompt: prompt, light: true})
+    request = Finch.build(:post, url, headers, request_body)
+
     case Finch.request(request, @finch, receive_timeout: 200_000) do
       {:ok, %Finch.Response{status: 200, body: body}} ->
         case Jason.decode(body, keys: :strings) do

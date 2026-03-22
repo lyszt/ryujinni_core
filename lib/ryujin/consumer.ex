@@ -12,10 +12,6 @@ defmodule Ryujin.Consumer do
       case Speech.answer_quickly(msg.content, msg.channel_id) do
         {:ok, embed} ->
           embed
-
-        {:error, reason} ->
-          Logger.info("Erro na resposta: #{inspect(reason)}")
-          ""
       end
 
     case Message.create(
