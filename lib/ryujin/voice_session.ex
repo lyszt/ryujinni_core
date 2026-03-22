@@ -33,11 +33,22 @@ defmodule Ryujin.VoiceSession do
   end
 
   @spec play(Nostrum.Struct.Guild.id(), any(), any(), Keyword.t()) ::
-          :ok | {:error, :session_not_found}
+          :playing | :queued | {:error, :session_not_found}
   def play(guild_id, url, type, opts \\ []) do
     case lookup(guild_id) do
       {:ok, pid} ->
-        GenServer.cast(pid, {:play, url, type, opts})
+        GenServer.call(pid, {:play, url, type, opts})
+
+      {:error, :not_found} ->
+        {:error, :session_not_found}
+    end
+  end
+
+  @spec skip(Nostrum.Struct.Guild.id()) :: :ok | {:error, :session_not_found}
+  def skip(guild_id) do
+    case lookup(guild_id) do
+      {:ok, pid} ->
+        GenServer.cast(pid, :skip)
         :ok
 
       {:error, :not_found} ->
@@ -85,6 +96,7 @@ defmodule Ryujin.VoiceSession do
       channel_id: channel_id,
       pending_join?: true,
       current_track: nil,
+      queue: [],
       loop: false
     }
 
@@ -133,18 +145,46 @@ defmodule Ryujin.VoiceSession do
   end
 
   @impl true
-  def handle_cast({:play, url, type, opts}, state) do
+  def handle_call({:play, url, type, opts}, _from, %{current_track: nil} = state) do
+    # Nothing is playing — start immediately.
     attempt_play(state.guild_id, {url, type, opts})
-    {:noreply, %{state | current_track: {url, type, opts}}}
+    {:reply, :playing, %{state | current_track: {url, type, opts}}}
+  end
+
+  def handle_call({:play, url, type, opts}, _from, state) do
+    # Something is already playing — push to the back of the queue.
+    {:reply, :queued, %{state | queue: state.queue ++ [{url, type, opts}]}}
+  end
+
+  @impl true
+  def handle_cast(:skip, state) do
+    # Stop whatever is playing; pop the next track from the queue.
+    Voice.stop(state.guild_id)
+
+    case state.queue do
+      [] ->
+        {:noreply, %{state | current_track: nil}}
+
+      [next | rest] ->
+        attempt_play(state.guild_id, next)
+        {:noreply, %{state | current_track: next, queue: rest}}
+    end
   end
 
   @impl true
   def handle_cast(:on_track_end, %{loop: true, current_track: {_, _, _} = track} = state) do
+    # Loop is on — replay the same track.
     attempt_play(state.guild_id, track)
     {:noreply, state}
   end
 
-  def handle_cast(:on_track_end, state), do: {:noreply, state}
+  def handle_cast(:on_track_end, %{queue: [next | rest]} = state) do
+    # Track finished naturally — play the next one in the queue.
+    attempt_play(state.guild_id, next)
+    {:noreply, %{state | current_track: next, queue: rest}}
+  end
+
+  def handle_cast(:on_track_end, state), do: {:noreply, %{state | current_track: nil}}
 
   @impl true
   def handle_info(:attempt_join, state) do

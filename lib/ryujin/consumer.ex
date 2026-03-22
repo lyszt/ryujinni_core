@@ -128,6 +128,25 @@ defmodule Ryujin.Consumer do
 
   @impl true
   def handle_event(
+        {:INTERACTION_CREATE, %Interaction{data: %{name: "skip"}} = interaction, _ws_state}
+      ) do
+    case VoiceSession.skip(interaction.guild_id) do
+      :ok ->
+        Nostrum.Api.Interaction.create_response(interaction, %{
+          type: 4,
+          data: %{content: "> Pulando...", flags: 64}
+        })
+
+      {:error, :session_not_found} ->
+        Nostrum.Api.Interaction.create_response(interaction, %{
+          type: 4,
+          data: %{content: "> Não estou em nenhum canal de voz.", flags: 64}
+        })
+    end
+  end
+
+  @impl true
+  def handle_event(
         {:INTERACTION_CREATE, %Interaction{data: %{name: "play"}} = interaction, _ws_state}
       ) do
     case check_if_incall(interaction) do
@@ -169,11 +188,14 @@ defmodule Ryujin.Consumer do
                       raw
                   end
 
-                Nostrum.Api.Interaction.edit_response(interaction, %{
-                  content: "> Tocando #{title}."
-                })
+                message =
+                  case VoiceSession.play(interaction.guild_id, url, :ytdl) do
+                    :playing -> "> Tocando #{title}."
+                    :queued -> "> Adicionado à fila: #{title}."
+                    _ -> "> #{title}."
+                  end
 
-                VoiceSession.play(interaction.guild_id, url, :ytdl)
+                Nostrum.Api.Interaction.edit_response(interaction, %{content: message})
 
               {:error, reason} ->
                 Logger.warning(
