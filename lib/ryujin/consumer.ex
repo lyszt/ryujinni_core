@@ -162,30 +162,31 @@ defmodule Ryujin.Consumer do
                 Nostrum.Api.Interaction.create_response(interaction, %{
                   type: 5,
                   data: %{
-                    content: "> #{url}.",
+                    content: "> Buscando...",
                     # flags: 64 - Deactivated cause I want people to know what I listen to
                   }
                 })
 
-                title_args = [
-                  "--print", "title",
-                  "--no-warnings",
-                  "--ignore-errors",
-                  "--max-downloads", "1",
-                  url
-                ]
+                # Single yt-dlp call: first printed line = title, second = direct stream URL.
+                # Using :url type so Nostrum never calls yt-dlp internally (no cookie support there).
+                yt_args =
+                  ["--print", "title", "--print", "urls",
+                   "-f", "bestaudio/best",
+                   "--no-playlist", "--no-warnings", "--ignore-errors",
+                   "--max-downloads", "1"] ++ ytdlp_auth_args() ++ [url]
 
-                title =
-                  case System.cmd("yt-dlp", title_args) do
-                    {output, _exit_code} when byte_size(output) > 0 ->
-                      output |> String.trim() |> String.split("\n") |> List.first()
+                {title, stream_url} =
+                  case System.cmd("yt-dlp", yt_args) do
+                    {output, _} when byte_size(output) > 0 ->
+                      lines = output |> String.trim() |> String.split("\n")
+                      {List.first(lines) || raw, List.last(lines) || url}
 
                     _ ->
-                      raw
+                      {raw, url}
                   end
 
                 message =
-                  case VoiceSession.play(interaction.guild_id, url, :ytdl) do
+                  case VoiceSession.play(interaction.guild_id, stream_url, :url) do
                     :playing -> "> Tocando #{title}."
                     :queued -> "> Adicionado à fila: #{title}."
                     _ -> "> #{title}."
@@ -380,6 +381,15 @@ defmodule Ryujin.Consumer do
 
   # Fallback: when options isn't a list or option isn't found
   defp get_option(_interaction, _name), do: {:error, :missing}
+
+  # Returns extra yt-dlp flags for cookie auth, based on :ryujin, :ytdlp_cookies config.
+  defp ytdlp_auth_args do
+    case Application.get_env(:ryujin, :ytdlp_cookies) do
+      {:file, path} -> ["--cookies", path]
+      {:browser, browser} -> ["--cookies-from-browser", browser]
+      _ -> []
+    end
+  end
 
   @impl true
 end

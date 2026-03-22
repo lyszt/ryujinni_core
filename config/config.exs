@@ -43,4 +43,8 @@ config :elixir, :reload_modules, true
 
 config :nostrum, :youtubedl, "yt-dlp"
 
+# Cookies passed to every yt-dlp call.
+# {:browser, "firefox"} | {:browser, "chrome"} | {:file, "/path/to/cookies.txt"} | nil
+config :ryujin, :ytdlp_cookies, {:browser, "firefox"}
+
 import_config "#{config_env()}.exs"
