@@ -104,7 +104,7 @@ defmodule Ryujin.Speech do
     url = @base_url <> "answer/"
     headers = [{"content-type", "application/json"}]
 
-    request_body = Jason.encode!(%{prompt: prompt, light: true, username: "discord:ryujinni"})
+    request_body = Jason.encode!(%{prompt: prompt, light: true, username: "discord:Clairemont"})
     request = Finch.build(:post, url, headers, request_body)
 
     case Finch.request(request, @finch, receive_timeout: 200_000) do
