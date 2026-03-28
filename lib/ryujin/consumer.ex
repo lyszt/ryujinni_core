@@ -167,26 +167,18 @@ defmodule Ryujin.Consumer do
                   }
                 })
 
-                # Single yt-dlp call: first printed line = title, second = direct stream URL.
-                # Using :url type so Nostrum never calls yt-dlp internally (no cookie support there).
-                yt_args =
-                  ["--print", "title", "--print", "urls",
-                   "-f", "bestaudio/best",
-                   "--no-playlist", "--no-warnings", "--ignore-errors",
-                   "--max-downloads", "1"] ++ ytdlp_auth_args() ++ [url]
-
-                {title, stream_url} =
-                  case System.cmd("yt-dlp", yt_args) do
+                title =
+                  case System.cmd("yt-dlp", ["--print", "title", "--no-warnings",
+                                              "--ignore-errors", "--max-downloads", "1", url]) do
                     {output, _} when byte_size(output) > 0 ->
-                      lines = output |> String.trim() |> String.split("\n")
-                      {List.first(lines) || raw, List.last(lines) || url}
+                      output |> String.trim() |> String.split("\n") |> List.first()
 
                     _ ->
-                      {raw, url}
+                      raw
                   end
 
                 message =
-                  case VoiceSession.play(interaction.guild_id, stream_url, :url) do
+                  case VoiceSession.play(interaction.guild_id, url, :ytdl) do
                     :playing -> "> Tocando #{title}."
                     :queued -> "> Adicionado à fila: #{title}."
                     _ -> "> #{title}."

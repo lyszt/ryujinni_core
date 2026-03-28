@@ -46,19 +46,27 @@ defmodule Ryujin.Speech do
     url = @base_url <> "deepthink/"
     headers = [{"content-type", "application/json"}]
 
-    context =
+    {context_text, triggering_user} =
       case get_context(channel_id) do
         {:ok, messages} ->
-          messages
-          |> Enum.reverse()
-          |> Enum.map(&(&1.author.username <> ":" <> &1.content))
-          |> Enum.join("\n")
+          latest_author = List.last(messages).author.username
 
-      end
+      text =
+        messages
+        |> Enum.reverse()
+        |> Enum.map(&(&1.author.username <> ":" <> &1.content))
+        |> Enum.join("\n")
 
-    message_with_context = "#{message} -- CHAT CONTEXT: #{context}"
+      {text, latest_author}
+  end
 
-    request_body = Jason.encode!(%{prompt: message_with_context, light: true})
+    message_with_context = "#{message} -- CHAT CONTEXT: #{context_text}"
+
+    request_body = Jason.encode!(%{
+      prompt: message_with_context,
+      light: true,
+      username: "discord:#{triggering_user}"
+    })
     request = Finch.build(:post, url, headers, request_body)
 
     # Needs a huge timeout in case Providentia overthinks
@@ -81,7 +89,7 @@ defmodule Ryujin.Speech do
     url = @base_url <> "answer/"
     headers = [{"content-type", "application/json"}]
 
-    request_body = Jason.encode!(%{prompt: prompt, light: true})
+    request_body = Jason.encode!(%{prompt: prompt, light: true, username: "discord:ryujinni"})
     request = Finch.build(:post, url, headers, request_body)
 
     case Finch.request(request, @finch, receive_timeout: 200_000) do
