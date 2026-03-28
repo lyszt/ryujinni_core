@@ -5,18 +5,23 @@ defmodule Ryujin.Speech do
   require Logger
 
   def answer_quickly(message, channel_id) do
-    {:ok, responseStruct} = get_simple_response(message, channel_id)
+    case get_simple_response(message, channel_id) do
+      {:ok, responseStruct} ->
+        create_message_embed(responseStruct["response"])
 
-    case create_message_embed(responseStruct["response"]) do
-      {:ok, embed} ->
-        {:ok, embed}
-
+      {:error, reason} ->
+        Logger.error("answer_quickly failed: #{inspect(reason)}")
+        create_message_embed("Sorry, I can't talk to you.")
     end
   end
 
   def think(prompt) do
-    {:ok, responseStruct} = get_simple_prompt(prompt)
-    responseStruct
+    case get_simple_prompt(prompt) do
+      {:ok, responseStruct} -> responseStruct
+      {:error, reason} ->
+        Logger.error("think failed: #{inspect(reason)}")
+        %{"response" => "Sorry, I can't talk to you."}
+    end
   end
 
   defp create_message_embed(message_string) do
@@ -39,6 +44,7 @@ defmodule Ryujin.Speech do
 
       {:error, reason} ->
         Logger.info("Error finding message context: #{inspect(reason)}")
+        {:error, reason}
     end
   end
 
@@ -51,14 +57,17 @@ defmodule Ryujin.Speech do
         {:ok, messages} ->
           latest_author = List.last(messages).author.username
 
-      text =
-        messages
-        |> Enum.reverse()
-        |> Enum.map(&(&1.author.username <> ":" <> &1.content))
-        |> Enum.join("\n")
+          text =
+            messages
+            |> Enum.reverse()
+            |> Enum.map(&(&1.author.username <> ":" <> &1.content))
+            |> Enum.join("\n")
 
-      {text, latest_author}
-  end
+          {text, latest_author}
+
+        {:error, _} ->
+          {"", "unknown"}
+      end
 
     message_with_context = "#{message} -- CHAT CONTEXT: #{context_text}"
 
@@ -75,6 +84,12 @@ defmodule Ryujin.Speech do
         case Jason.decode(body, keys: :strings) do
           {:ok, data} -> {:ok, data}
           {:error, reason} -> {:error, "JSON decoding failed: #{inspect(reason)}"}
+        end
+
+      {:ok, %Finch.Response{status: 403, body: body}} ->
+        case Jason.decode(body, keys: :strings) do
+          {:ok, %{"response" => msg}} -> {:ok, %{"response" => msg}}
+          _ -> {:ok, %{"response" => "Sorry, I can't talk to you."}}
         end
 
       {:ok, %Finch.Response{status: status, body: body}} ->
@@ -97,6 +112,12 @@ defmodule Ryujin.Speech do
         case Jason.decode(body, keys: :strings) do
           {:ok, data} -> {:ok, data}
           {:error, reason} -> {:error, "JSON decoding failed: #{inspect(reason)}"}
+        end
+
+      {:ok, %Finch.Response{status: 403, body: body}} ->
+        case Jason.decode(body, keys: :strings) do
+          {:ok, %{"response" => msg}} -> {:ok, %{"response" => msg}}
+          _ -> {:ok, %{"response" => "Sorry, I can't talk to you."}}
         end
 
       {:ok, %Finch.Response{status: status, body: body}} ->
