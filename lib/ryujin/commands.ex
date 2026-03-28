@@ -39,6 +39,12 @@ defmodule Ryujin.CommandRegister do
       name: "camara_eventos",
       description:
         "Veja uma lista de eventos previstos nos diversos orgãos da câmara de deputados."
+    },
+    # Self management commands
+    %{
+      name: "selfpurge",
+      description:
+        "Apaga as 10 ultimas mensagens do bot."
     }
   ]
 

@@ -6,6 +6,7 @@ defmodule Ryujin.Consumer do
   alias Nostrum.Struct.Interaction
   alias Ryujin.VoiceSession
   alias Ryujin.Speech
+  alias Ryujin.Utils
 
   defp answer_individual(msg) do
     answer =
@@ -32,45 +33,21 @@ defmodule Ryujin.Consumer do
     message
   end
 
-  defp get_bot_id() do
-    app_info =
-      case Nostrum.Api.Self.application_information() do
-        {:ok, info} ->
-          info
-
-        {:error, reason} ->
-          Logger.info("Error getting bot id: #{inspect(reason)}")
-          reason
-      end
-
-    # Logger.info(app_info)
-    bot_details = app_info.bot.id
-    {:ok, bot_details}
-  end
-
   @impl true
   def handle_event({:MESSAGE_CREATE, msg, _ws_state}) do
     lowered_msg = String.downcase(msg.content)
-    {:ok, bot_id} = get_bot_id()
+    bot_id = Utils.get_bot_id()
 
     # Logger.info(bot_id)
     last_messages = get_last_messages(msg.channel_id)
     id_message = "<@#{bot_id}>"
 
-    Enum.each(
-      last_messages,
-      fn message ->
-        if message.author.id == bot_id do
-          answer_individual(msg)
-        end
-      end
-    )
-
-    # First, verify if the author is not oneself
     if msg.author.id != bot_id do
-      # Check if it it's referencing the bot
-      if String.contains?(lowered_msg, id_message) or String.contains?(lowered_msg, "claire") or
-           String.contains?(lowered_msg, "clairemont") or String.contains?(lowered_msg, id_message) do
+      bot_recently_spoke = Enum.any?(last_messages, fn m -> m.author.id == bot_id end)
+
+      if bot_recently_spoke or String.contains?(lowered_msg, id_message) or
+           String.contains?(lowered_msg, "claire") or
+           String.contains?(lowered_msg, "clairemont") do
         answer_individual(msg)
       end
     end
@@ -266,6 +243,38 @@ defmodule Ryujin.Consumer do
         flags: 64
       }
     })
+  end
+
+  @impl true
+  def handle_event(
+        {:INTERACTION_CREATE, %Interaction{data: %{name: "selfpurge"}} = interaction, _ws_state}
+      ) do
+
+        Nostrum.Api.Interaction.create_response(interaction, %{
+          type: 4,
+          data: %{content: "> Limpando mensagens...", flags: 64}
+        })
+
+        channel = interaction.channel_id
+        bot_id = Utils.get_bot_id()
+        Logger.info("Performing self purge on channel #{channel}")
+
+        case Nostrum.Api.Channel.messages(channel, 10) do
+          {:ok, messages} ->
+            Logger.info("bot_id=#{bot_id}, authors=#{inspect(Enum.map(messages, & &1.author.id))}")
+            Enum.each(messages, fn message ->
+              if message.author.id == bot_id do
+                Nostrum.Api.Message.delete(channel, message.id)
+              end
+            end)
+
+          {:error, reason} ->
+            Logger.info("Error finding message context: #{inspect(reason)}")
+            {:error, reason}
+        end
+
+
+
   end
 
   # ================================================================================

@@ -49,9 +49,6 @@ defmodule Ryujin.Speech do
   end
 
   defp get_simple_response(message, channel_id) do
-    url = @base_url <> "deepthink/"
-    headers = [{"content-type", "application/json"}]
-
     {context_text, triggering_user} =
       case get_context(channel_id) do
         {:ok, messages} ->
@@ -69,43 +66,20 @@ defmodule Ryujin.Speech do
           {"", "unknown"}
       end
 
-    message_with_context = "#{message} -- CHAT CONTEXT: #{context_text}"
-
-    request_body = Jason.encode!(%{
-      prompt: message_with_context,
+    post(@base_url <> "deepthink/", %{
+      prompt: "#{message} -- CHAT CONTEXT: #{context_text}",
       light: true,
       username: "discord:#{triggering_user}"
     })
-    request = Finch.build(:post, url, headers, request_body)
-
-    # Needs a huge timeout in case Providentia overthinks
-    case Finch.request(request, @finch, receive_timeout: 200_000) do
-      {:ok, %Finch.Response{status: 200, body: body}} ->
-        case Jason.decode(body, keys: :strings) do
-          {:ok, data} -> {:ok, data}
-          {:error, reason} -> {:error, "JSON decoding failed: #{inspect(reason)}"}
-        end
-
-      {:ok, %Finch.Response{status: 403, body: body}} ->
-        case Jason.decode(body, keys: :strings) do
-          {:ok, %{"response" => msg}} -> {:ok, %{"response" => msg}}
-          _ -> {:ok, %{"response" => "Sorry, I can't talk to you."}}
-        end
-
-      {:ok, %Finch.Response{status: status, body: body}} ->
-        {:error, "API returned status #{status} with body: #{body}"}
-
-      {:error, reason} ->
-        {:error, "HTTP request failed: #{inspect(reason)}"}
-    end
   end
 
   defp get_simple_prompt(prompt) do
-    url = @base_url <> "answer/"
-    headers = [{"content-type", "application/json"}]
+    post(@base_url <> "answer/", %{prompt: prompt, light: true, username: "discord:Clairemont"})
+  end
 
-    request_body = Jason.encode!(%{prompt: prompt, light: true, username: "discord:Clairemont"})
-    request = Finch.build(:post, url, headers, request_body)
+  # Needs a huge timeout in case Providentia overthinks
+  defp post(url, body) do
+    request = Finch.build(:post, url, [{"content-type", "application/json"}], Jason.encode!(body))
 
     case Finch.request(request, @finch, receive_timeout: 200_000) do
       {:ok, %Finch.Response{status: 200, body: body}} ->
