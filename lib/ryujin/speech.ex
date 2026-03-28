@@ -55,7 +55,7 @@ defmodule Ryujin.Speech do
     {context_text, triggering_user} =
       case get_context(channel_id) do
         {:ok, messages} ->
-          latest_author = List.last(messages).author.username
+          latest_author = List.first(messages).author.username
 
           text =
             messages

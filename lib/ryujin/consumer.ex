@@ -70,7 +70,7 @@ defmodule Ryujin.Consumer do
     if msg.author.id != bot_id do
       # Check if it it's referencing the bot
       if String.contains?(lowered_msg, id_message) or String.contains?(lowered_msg, "claire") or
-           String.contains?(lowered_msg, "clairemont") do
+           String.contains?(lowered_msg, "clairemont") or String.contains?(lowered_msg, id_message) do
         answer_individual(msg)
       end
     end
